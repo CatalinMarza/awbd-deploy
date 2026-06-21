@@ -29,20 +29,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Spring Security configuration.
- *
- * <ul>
- *   <li>JDBC authentication ({@link JdbcUserDetailsManager}) against the
- *       {@code users}/{@code authorities} tables, with BCrypt password hashing.</li>
- *   <li>Session-cookie based authentication for the Vue.js SPA, with
- *       remember-me support.</li>
- *   <li>Method security ({@code @PreAuthorize}) for {@code ROLE_ADMIN} writes;
- *       reads require any authenticated user.</li>
- *   <li>JSON responses for login/logout and for 401/403 instead of redirects.</li>
- *   <li>CSRF disabled (SPA + same-site session cookie), CORS enabled for the SPA origin.</li>
- * </ul>
- */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -50,7 +36,7 @@ public class SecurityConfig {
 
     private final ObjectMapper objectMapper;
 
-    @Value("${app.cors.allowed-origins}")
+    @Value("${app.cors.allowed-origins:http://localhost:5173,https://*.vercel.app}")
     private List<String> allowedOrigins;
 
     @Value("${app.security.remember-me-key:art-gallery-remember-me-key}")
@@ -97,10 +83,11 @@ public class SecurityConfig {
                         .tokenValiditySeconds(7 * 24 * 60 * 60))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, e) ->
-                                writeJson(response, HttpStatus.UNAUTHORIZED, "Authentication is required to access this resource"))
+                                writeJson(response, HttpStatus.UNAUTHORIZED,
+                                        "Authentication is required to access this resource"))
                         .accessDeniedHandler((request, response, e) ->
-                                writeJson(response, HttpStatus.FORBIDDEN, "You do not have permission to perform this action")))
-                // Allow the H2 console to render inside frames (dev only).
+                                writeJson(response, HttpStatus.FORBIDDEN,
+                                        "You do not have permission to perform this action")))
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
 
         return http.build();
@@ -109,12 +96,17 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(allowedOrigins);
+
+        config.setAllowedOriginPatterns(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("Set-Cookie"));
         config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
+
         return source;
     }
 
@@ -123,7 +115,12 @@ public class SecurityConfig {
             List<String> roles = authentication.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
                     .toList();
-            Map<String, Object> data = Map.of("username", authentication.getName(), "roles", roles);
+
+            Map<String, Object> data = Map.of(
+                    "username", authentication.getName(),
+                    "roles", roles
+            );
+
             response.setStatus(HttpStatus.OK.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             objectMapper.writeValue(response.getWriter(), ApiResponse.ok(data, "Login successful"));
