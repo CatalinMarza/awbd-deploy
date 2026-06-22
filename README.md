@@ -785,8 +785,8 @@ awbd
 │   ├── package.json
 │   └── vite.config.js
 │
-├── docs
-│   └── screenshots
+├── screenshots
+│   └── *.png
 │
 └── README.md
 ```
