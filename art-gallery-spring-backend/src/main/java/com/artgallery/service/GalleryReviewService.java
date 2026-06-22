@@ -41,19 +41,36 @@ public class GalleryReviewService {
     private final DtoMapper mapper;
 
     @Transactional(readOnly = true)
-    public PageResponse list(Pageable pageable) {
+    public PageResponse<GalleryReviewResponse> list(Pageable pageable) {
         log.debug("Listing reviews {}", pageable);
-        return PageResponse.from(reviewRepository.findAll(pageable).map(mapper::toResponse));
+
+        return PageResponse.from(
+                reviewRepository
+                        .findAll(pageable)
+                        .map(mapper::toResponse)
+        );
     }
 
     @Transactional(readOnly = true)
-    public PageResponse listByArtwork(Long artworkId, Pageable pageable) {
-        return PageResponse.from(reviewRepository.findByArtworkId(artworkId, pageable).map(mapper::toResponse));
+    public PageResponse<GalleryReviewResponse> listByArtwork(Long artworkId, Pageable pageable) {
+        log.debug("Listing reviews for artworkId={} {}", artworkId, pageable);
+
+        return PageResponse.from(
+                reviewRepository
+                        .findByArtworkId(artworkId, pageable)
+                        .map(mapper::toResponse)
+        );
     }
 
     @Transactional(readOnly = true)
-    public PageResponse listByExhibition(Long exhibitionId, Pageable pageable) {
-        return PageResponse.from(reviewRepository.findByExhibitionId(exhibitionId, pageable).map(mapper::toResponse));
+    public PageResponse<GalleryReviewResponse> listByExhibition(Long exhibitionId, Pageable pageable) {
+        log.debug("Listing reviews for exhibitionId={} {}", exhibitionId, pageable);
+
+        return PageResponse.from(
+                reviewRepository
+                        .findByExhibitionId(exhibitionId, pageable)
+                        .map(mapper::toResponse)
+        );
     }
 
     @Transactional(readOnly = true)

@@ -34,13 +34,18 @@ public class VisitorService {
     private final DtoMapper mapper;
 
     @Transactional(readOnly = true)
-    public PageResponse list(Pageable pageable) {
+    public PageResponse<VisitorResponse> list(Pageable pageable) {
         log.debug("Listing visitors {}", pageable);
-        return PageResponse.from(visitorRepository.findAll(pageable).map(mapper::toResponse));
+
+        return PageResponse.from(
+                visitorRepository
+                        .findAll(pageable)
+                        .map(mapper::toResponse)
+        );
     }
 
     @Transactional(readOnly = true)
-    public PageResponse search(String term, Pageable pageable) {
+    public PageResponse<VisitorResponse> search(String term, Pageable pageable) {
         log.debug("Searching visitors for '{}'", term);
 
         return PageResponse.from(
