@@ -831,7 +831,7 @@ Deployment-ul online este disponibil prin Vercel, Render și Neon PostgreSQL.
 Backend-ul este publicat pe Render Free Tier. După perioade de inactivitate, Render poate opri temporar serviciul, iar primul request poate avea o întârziere până când serverul repornește. Frontend-ul Vue verifică autentificarea la pornire prin endpoint-ul `/api/auth/me`, deci această întârziere poate apărea ca `Loading application...`.
 După ce serverul Render este activ, aplicația se încarcă normal.
 Dacă pagina rămâne temporar în starea `Loading application...`, se poate verifica direct backend-ul accesând linkul API-ului Render sau pagina serviciului din Render Dashboard.
-Backend-ul Render nu are pagină HTML la ruta principală `/`. Pentru verificarea pornirii serverului se poate accesa endpoint-ul: [https://art-gallery-backend-catalin.onrender.com/api/auth/me](https://art-gallery-backend-catalin.onrender.com/api/auth/me)
+Backend-ul Render nu are pagină HTML la ruta principală `/`. Pentru verificarea pornirii serverului se poate accesa endpoint-ul: [https://art-gallery-backend-agdm.onrender.com/api/auth/me](https://art-gallery-backend-agdm.onrender.com/api/auth/me)
 Un răspuns `401 Unauthorized` este normal și indică faptul că serverul este pornit, dar utilizatorul nu este autentificat.
 
 ```
