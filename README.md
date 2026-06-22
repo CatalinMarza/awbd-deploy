@@ -31,7 +31,7 @@ Aplicația este disponibilă online prin Vercel, Render și Neon PostgreSQL.
 
 | Resursă | Link |
 |---|---|
-| Frontend online - Vercel | [https://awbd-deploy-hd22iz59o-catalinmarza29-2853s-projects.vercel.app] pw admin=AdminGallery2026! user=UserGallery2026!|
+| Frontend online - Vercel | [https://awbd-deploy-hd22iz59o-catalinmarza29-2853s-projects.vercel.app](https://awbd-deploy-hd22iz59o-catalinmarza29-2853s-projects.vercel.app) pw admin=AdminGallery2026! user=UserGallery2026!|
 | Backend online - Render | [https://art-gallery-backend-agdm.onrender.com](https://art-gallery-backend-agdm.onrender.com) |
 | API online | [https://art-gallery-backend-agdm.onrender.com/api](https://art-gallery-backend-agdm.onrender.com/api) |
 | Repository echipă | [https://github.com/lucalovin/awbd](https://github.com/lucalovin/awbd) |
@@ -827,3 +827,6 @@ git push
 
 ## Observații
 Deployment-ul online este disponibil prin Vercel, Render și Neon PostgreSQL.
+Backend-ul este publicat pe Render Free Tier. După perioade de inactivitate, Render poate opri temporar serviciul, iar primul request poate avea o întârziere până când serverul repornește. Frontend-ul Vue verifică autentificarea la pornire prin endpoint-ul `/api/auth/me`, deci această întârziere poate apărea ca `Loading application...`.
+După ce serverul Render este activ, aplicația se încarcă normal. În testele noastre, după pornirea backend-ului, frontend-ul Vue se încarcă în aproximativ 1 secundă. Pentru a vizualiza starea se poate acces [https://art-gallery-backend-catalin.onrender.com](https://art-gallery-backend-catalin.onrender.com)
+Dacă pagina rămâne temporar în starea `Loading application...`, se poate verifica direct backend-ul accesând linkul API-ului Render sau pagina serviciului din Render Dashboard.
