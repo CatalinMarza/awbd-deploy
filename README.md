@@ -7,7 +7,7 @@ Aplicația este disponibilă online prin Vercel, Render și Neon PostgreSQL.
 ---
 ## Cuprins
 
-- [Linkuri proiect](#linkuri-proiect)
+- [Linkuri proiect](#linkuri-proiect) pw admin=AdminGallery2026! user=UserGallery2026!
 - [Descriere proiect](#descriere-proiect)
 - [Cerințe implementate - PCT I](#cerințe-implementate---pct-i)
 - [Tehnologii folosite](#tehnologii-folosite)
