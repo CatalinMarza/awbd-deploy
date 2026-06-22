@@ -7,7 +7,7 @@ Aplicația este disponibilă online prin Vercel, Render și Neon PostgreSQL.
 ---
 ## Cuprins
 
-- [Linkuri proiect](#linkuri-proiect) pw admin=AdminGallery2026! user=UserGallery2026!
+- [Linkuri proiect](#linkuri-proiect) 
 - [Descriere proiect](#descriere-proiect)
 - [Cerințe implementate - PCT I](#cerințe-implementate---pct-i)
 - [Tehnologii folosite](#tehnologii-folosite)
@@ -31,7 +31,7 @@ Aplicația este disponibilă online prin Vercel, Render și Neon PostgreSQL.
 
 | Resursă | Link |
 |---|---|
-| Frontend online - Vercel | [https://awbd-deploy-hd22iz59o-catalinmarza29-2853s-projects.vercel.app] |
+| Frontend online - Vercel | [https://awbd-deploy-hd22iz59o-catalinmarza29-2853s-projects.vercel.app] pw admin=AdminGallery2026! user=UserGallery2026!|
 | Backend online - Render | [https://art-gallery-backend-agdm.onrender.com](https://art-gallery-backend-agdm.onrender.com) |
 | API online | [https://art-gallery-backend-agdm.onrender.com/api](https://art-gallery-backend-agdm.onrender.com/api) |
 | Repository echipă | [https://github.com/lucalovin/awbd](https://github.com/lucalovin/awbd) |
