@@ -72,7 +72,7 @@ function formatMoney(value) {
 
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'EUR',
+    currency: 'USD',
     maximumFractionDigits: 0,
   }).format(numberValue);
 }
