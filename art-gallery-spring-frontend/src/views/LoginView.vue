@@ -51,9 +51,6 @@ async function submit() {
         </button>
       </form>
 
-      <p class="muted" style="font-size: 0.8rem; margin-bottom: 0">
-        Demo: <strong>admin / admin123</strong> or <strong>user / user123</strong>
-      </p>
     </div>
   </div>
 </template>
