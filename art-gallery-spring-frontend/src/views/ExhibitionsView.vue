@@ -1,83 +1,110 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import DataTable from '../components/DataTable.vue';
 import { exhibitions, exhibitionArtworks, search } from '../api/resources';
-import { useAuthStore } from '../stores/auth';
 import { normalizeError } from '../api/http';
+import { useAuthStore } from '../stores/auth';
 
-const auth = useAuthStore();
 const router = useRouter();
+const authStore = useAuthStore();
 
-const table = ref(null);
-const query = ref('');
-const actionError = ref(null);
+const rows = ref([]);
+const loading = ref(false);
+const error = ref(null);
 
-const columns = [
-  { key: 'id', label: 'ID', sortable: true },
-  { key: 'title', label: 'Title', sortable: true },
-  { key: 'exhibitorName', label: 'Exhibitor', sortable: false },
-  { key: 'startDate', label: 'Start', sortable: true },
-  { key: 'endDate', label: 'End', sortable: true },
-  { key: 'artworkCount', label: 'Artworks', sortable: false },
-];
+const searchTerm = ref('');
+const appliedSearch = ref('');
 
-function normalizePage(payload) {
-  if (payload?.data?.content) {
-    return payload.data;
-  }
+const page = ref(0);
+const size = ref(10);
+const totalElements = ref(0);
+const totalPages = ref(0);
+const sort = ref('startDate,asc');
 
-  if (payload?.content) {
-    return payload;
-  }
+const isAdmin = computed(() => authStore.isAdmin);
+
+const liveCount = computed(() =>
+  rows.value.filter((exhibition) => getStatus(exhibition).key === 'live').length,
+);
+
+const scheduledCount = computed(() =>
+  rows.value.filter((exhibition) => getStatus(exhibition).key === 'scheduled').length,
+);
+
+const pageLabel = computed(() => {
+  const current = totalPages.value ? page.value + 1 : 1;
+  const total = totalPages.value || 1;
+  return `Page ${current} of ${total} · ${totalElements.value} total`;
+});
+
+const hasPrevious = computed(() => page.value > 0);
+const hasNext = computed(() => page.value + 1 < totalPages.value);
+
+function asPage(payload) {
+  const pagePayload = payload?.data || payload || {};
 
   return {
-    content: Array.isArray(payload) ? payload : [],
-    page: 0,
-    size: Array.isArray(payload) ? payload.length : 0,
-    totalElements: Array.isArray(payload) ? payload.length : 0,
-    totalPages: 1,
-    first: true,
-    last: true,
-    numberOfElements: Array.isArray(payload) ? payload.length : 0,
+    content: Array.isArray(pagePayload.content) ? pagePayload.content : [],
+    page: Number(pagePayload.page ?? page.value ?? 0),
+    size: Number(pagePayload.size ?? size.value ?? 10),
+    totalElements: Number(pagePayload.totalElements ?? 0),
+    totalPages: Number(pagePayload.totalPages ?? 0),
   };
 }
 
 function asArray(payload) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  if (Array.isArray(payload?.data)) {
-    return payload.data;
-  }
-
-  if (Array.isArray(payload?.content)) {
-    return payload.content;
-  }
-
-  if (Array.isArray(payload?.data?.content)) {
-    return payload.data.content;
-  }
-
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.content)) return payload.content;
+  if (Array.isArray(payload?.data?.content)) return payload.data.content;
   return [];
 }
 
-async function fetcher(params) {
-  const rawPage = query.value.trim()
-    ? await search.exhibitions(query.value.trim(), params)
-    : await exhibitions.list(params);
+function getExhibitorName(exhibition) {
+  return exhibition.exhibitorName || exhibition.exhibitor?.name || 'Unknown exhibitor';
+}
 
-  const page = normalizePage(rawPage);
+function getStatus(exhibition) {
+  const now = new Date();
+  const start = exhibition.startDate ? new Date(exhibition.startDate) : null;
+  const end = exhibition.endDate ? new Date(exhibition.endDate) : null;
 
-  const content = await Promise.all(
-    (page.content || []).map(async (exhibition) => {
+  if (start && now < start) {
+    return {
+      key: 'scheduled',
+      label: 'Scheduled',
+    };
+  }
+
+  if (end && now > end) {
+    return {
+      key: 'closed',
+      label: 'Closed',
+    };
+  }
+
+  return {
+    key: 'live',
+    label: 'Live',
+  };
+}
+
+function getPeriod(exhibition) {
+  const start = exhibition.startDate || '—';
+  const end = exhibition.endDate || '—';
+
+  return `${start} — ${end}`;
+}
+
+async function enrichWithArtworkCounts(exhibitionRows) {
+  return Promise.all(
+    exhibitionRows.map(async (exhibition) => {
       try {
-        const linkedArtworks = asArray(await exhibitionArtworks.list(exhibition.id));
+        const linkedArtworks = await exhibitionArtworks.list(exhibition.id);
 
         return {
           ...exhibition,
-          artworkCount: linkedArtworks.length,
+          artworkCount: asArray(linkedArtworks).length,
         };
       } catch {
         return {
@@ -87,138 +114,706 @@ async function fetcher(params) {
       }
     }),
   );
-
-  return {
-    ...page,
-    content,
-  };
 }
 
-function reload() {
-  table.value?.reload();
+async function loadExhibitions() {
+  loading.value = true;
+  error.value = null;
+
+  try {
+    const params = {
+      page: page.value,
+      size: size.value,
+      sort: sort.value,
+    };
+
+    const result = appliedSearch.value
+      ? await search.exhibitions(appliedSearch.value, params)
+      : await exhibitions.list(params);
+
+    const parsed = asPage(result);
+
+    rows.value = await enrichWithArtworkCounts(parsed.content);
+    page.value = parsed.page;
+    size.value = parsed.size;
+    totalElements.value = parsed.totalElements;
+    totalPages.value = parsed.totalPages;
+  } catch (err) {
+    error.value = normalizeError(err).message;
+  } finally {
+    loading.value = false;
+  }
 }
 
-function clearSearch() {
-  query.value = '';
-  reload();
+function goToCreate() {
+  router.push({ name: 'exhibition-new' });
 }
 
-async function remove(item) {
-  const confirmed = confirm(`Delete exhibition "${item.title}"?`);
+function goToDetails(exhibition) {
+  router.push({ name: 'exhibition-details', params: { id: exhibition.id } });
+}
+
+function goToEdit(exhibition) {
+  router.push({ name: 'exhibition-edit', params: { id: exhibition.id } });
+}
+
+async function removeExhibition(exhibition) {
+  const confirmed = window.confirm(`Delete exhibition "${exhibition.title}"?`);
 
   if (!confirmed) {
     return;
   }
 
-  actionError.value = null;
-
   try {
-    await exhibitions.remove(item.id);
-    reload();
-  } catch (error) {
-    actionError.value = normalizeError(error).message;
+    await exhibitions.remove(exhibition.id);
+
+    if (rows.value.length === 1 && page.value > 0) {
+      page.value -= 1;
+    }
+
+    await loadExhibitions();
+  } catch (err) {
+    error.value = normalizeError(err).message;
   }
 }
+
+async function applySearch() {
+  appliedSearch.value = searchTerm.value.trim();
+  page.value = 0;
+  await loadExhibitions();
+}
+
+async function clearSearch() {
+  searchTerm.value = '';
+  appliedSearch.value = '';
+  page.value = 0;
+  await loadExhibitions();
+}
+
+async function previousPage() {
+  if (!hasPrevious.value) {
+    return;
+  }
+
+  page.value -= 1;
+  await loadExhibitions();
+}
+
+async function nextPage() {
+  if (!hasNext.value) {
+    return;
+  }
+
+  page.value += 1;
+  await loadExhibitions();
+}
+
+async function changeSort(value) {
+  sort.value = value;
+  page.value = 0;
+  await loadExhibitions();
+}
+
+onMounted(loadExhibitions);
 </script>
 
 <template>
-  <div class="page-header">
-    <div>
-      <h1>Exhibitions</h1>
-      <p class="muted">
-        View exhibitions and manage assigned artworks.
-      </p>
+  <div class="exhibitions-page">
+    <div class="exhibitions-page-header">
+      <div>
+        <p class="eyebrow">Exhibition schedule</p>
+        <h1>Exhibitions</h1>
+        <p class="muted">
+          Manage gallery exhibitions and the artworks assigned to each event.
+        </p>
+      </div>
+
+      <div class="exhibitions-header-actions">
+        <button
+          v-if="isAdmin"
+          type="button"
+          class="btn btn-primary"
+          @click="goToCreate"
+        >
+          + New Exhibition
+        </button>
+      </div>
     </div>
 
-    <router-link
-      v-if="auth.isAdmin"
-      class="btn btn-primary"
-      :to="{ name: 'exhibition-new' }"
-    >
-      + New Exhibition
-    </router-link>
-  </div>
+    <div class="exhibition-stats-grid">
+      <div class="exhibition-stat-card">
+        <span>Total exhibitions</span>
+        <strong>{{ totalElements }}</strong>
+        <small>Saved exhibition records</small>
+      </div>
 
-  <div v-if="actionError" class="alert alert-error">
-    {{ actionError }}
-  </div>
+      <div class="exhibition-stat-card">
+        <span>Live on page</span>
+        <strong>{{ liveCount }}</strong>
+        <small>Currently active events</small>
+      </div>
 
-  <div class="card">
-    <DataTable
-      ref="table"
-      :columns="columns"
-      :fetcher="fetcher"
-      default-sort="startDate,desc"
-    >
-      <template #toolbar>
-        <div class="table-toolbar">
-          <input
-            v-model="query"
-            class="table-search-input"
-            placeholder="Search exhibitions..."
-            @keyup.enter="reload"
-          />
+      <div class="exhibition-stat-card">
+        <span>Scheduled on page</span>
+        <strong>{{ scheduledCount }}</strong>
+        <small>Upcoming events</small>
+      </div>
+    </div>
 
-          <button class="btn" type="button" @click="reload">
-            Search
-          </button>
+    <section class="exhibitions-card">
+      <div class="exhibitions-toolbar">
+        <div class="exhibitions-search">
+          <label for="exhibitionSearch">Search exhibitions</label>
 
-          <button
-            v-if="query"
-            class="btn"
-            type="button"
-            @click="clearSearch"
-          >
-            Clear
-          </button>
+          <div class="exhibitions-search-row">
+            <input
+              id="exhibitionSearch"
+              v-model="searchTerm"
+              type="search"
+              placeholder="Search by exhibition title..."
+              @keyup.enter="applySearch"
+            />
+
+            <button type="button" class="btn btn-primary" @click="applySearch">
+              Search
+            </button>
+
+            <button type="button" class="btn btn-secondary" @click="clearSearch">
+              Clear
+            </button>
+          </div>
         </div>
-      </template>
 
-      <template #row="{ item }">
-        <td>{{ item.id }}</td>
+        <div class="exhibitions-sort">
+          <label for="exhibitionSort">Sort</label>
 
-        <td>
-          <strong class="table-title">{{ item.title }}</strong>
-        </td>
+          <select
+            id="exhibitionSort"
+            :value="sort"
+            @change="changeSort($event.target.value)"
+          >
+            <option value="startDate,asc">Start date asc</option>
+            <option value="startDate,desc">Start date desc</option>
+            <option value="title,asc">Title A-Z</option>
+            <option value="title,desc">Title Z-A</option>
+            <option value="id,desc">Newest ID</option>
+          </select>
+        </div>
+      </div>
 
-        <td>{{ item.exhibitorName || '—' }}</td>
-        <td>{{ item.startDate || '—' }}</td>
-        <td>{{ item.endDate || '—' }}</td>
+      <div v-if="error" class="alert alert-error">
+        {{ error }}
+      </div>
 
-        <td>
-          <span class="count-pill">
-            {{ item.artworkCount }}
-          </span>
-        </td>
-      </template>
+      <div v-if="loading" class="empty compact">
+        Loading exhibitions...
+      </div>
 
-      <template #actions="{ item }">
+      <div v-else-if="!rows.length" class="exhibitions-empty-state">
+        <div class="exhibitions-empty-icon">🏛️</div>
+        <h2>No exhibitions found</h2>
+        <p>Create an exhibition and assign artworks to it.</p>
+
         <button
-          class="table-action table-action-neutral"
+          v-if="isAdmin"
           type="button"
-          @click="router.push({ name: 'exhibition-details', params: { id: item.id } })"
+          class="btn btn-primary"
+          @click="goToCreate"
         >
-          View
+          + New Exhibition
+        </button>
+      </div>
+
+      <div v-else class="exhibition-list">
+        <article
+          v-for="exhibition in rows"
+          :key="exhibition.id"
+          class="exhibition-row-card"
+        >
+          <div class="exhibition-icon-card" :class="getStatus(exhibition).key">
+            🏛️
+          </div>
+
+          <div class="exhibition-main">
+            <div class="exhibition-main-header">
+              <div>
+                <h2>{{ exhibition.title }}</h2>
+                <p>{{ getExhibitorName(exhibition) }}</p>
+              </div>
+
+              <span class="exhibition-status-pill" :class="getStatus(exhibition).key">
+                {{ getStatus(exhibition).label }}
+              </span>
+            </div>
+
+            <div class="exhibition-meta-grid">
+
+              <div>
+                <span>Period</span>
+                <strong>{{ getPeriod(exhibition) }}</strong>
+              </div>
+
+              <div>
+                <span>Artworks</span>
+                <strong>{{ exhibition.artworkCount }}</strong>
+              </div>
+
+              <div>
+                <span>Exhibitor</span>
+                <strong>{{ getExhibitorName(exhibition) }}</strong>
+              </div>
+            </div>
+
+            <p v-if="exhibition.description" class="exhibition-description">
+              {{ exhibition.description }}
+            </p>
+          </div>
+
+          <div class="exhibition-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              @click="goToDetails(exhibition)"
+            >
+              View
+            </button>
+
+            <button
+              v-if="isAdmin"
+              type="button"
+              class="btn btn-secondary"
+              @click="goToEdit(exhibition)"
+            >
+              Edit
+            </button>
+
+            <button
+              v-if="isAdmin"
+              type="button"
+              class="btn btn-danger-soft"
+              @click="removeExhibition(exhibition)"
+            >
+              Delete
+            </button>
+          </div>
+        </article>
+      </div>
+
+      <div class="exhibitions-pagination">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="!hasPrevious"
+          @click="previousPage"
+        >
+          ← Prev
         </button>
 
-        <template v-if="auth.isAdmin">
-          <button
-            class="table-action table-action-edit"
-            type="button"
-            @click="router.push({ name: 'exhibition-edit', params: { id: item.id } })"
-          >
-            Edit
-          </button>
+        <span>{{ pageLabel }}</span>
 
-          <button
-            class="table-action table-action-delete"
-            type="button"
-            @click="remove(item)"
-          >
-            Delete
-          </button>
-        </template>
-      </template>
-    </DataTable>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="!hasNext"
+          @click="nextPage"
+        >
+          Next →
+        </button>
+      </div>
+    </section>
   </div>
 </template>
+
+<style scoped>
+.exhibitions-page {
+  width: 100%;
+}
+
+.exhibitions-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1.35rem;
+}
+
+.exhibitions-page-header h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.85rem, 3vw, 2.55rem);
+  line-height: 1.05;
+  letter-spacing: -0.055em;
+}
+
+.exhibitions-page-header p {
+  max-width: 760px;
+  margin-top: 0.7rem;
+  line-height: 1.6;
+}
+
+.exhibitions-header-actions {
+  flex: 0 0 auto;
+  padding-top: 0.25rem;
+}
+
+.exhibition-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.exhibition-stat-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.96));
+  box-shadow: var(--shadow-soft);
+}
+
+.exhibition-stat-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.exhibition-stat-card strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 950;
+}
+
+.exhibition-stat-card small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.exhibitions-card {
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, rgba(95, 125, 232, 0.08), transparent 18rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96));
+  box-shadow: var(--shadow);
+}
+
+.exhibitions-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.exhibitions-toolbar label {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--ink);
+  font-size: 0.83rem;
+  font-weight: 950;
+}
+
+.exhibitions-search-row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.exhibitions-search-row input {
+  flex: 1 1 auto;
+}
+
+.exhibition-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.exhibition-row-card {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.91);
+  box-shadow: var(--shadow-soft);
+}
+
+.exhibition-icon-card {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #8aa3ff, var(--primary));
+  color: white;
+  font-size: 1.35rem;
+  box-shadow: 0 12px 26px rgba(95, 125, 232, 0.2);
+}
+
+.exhibition-icon-card.live {
+  background: linear-gradient(135deg, #38d996, #16a46f);
+  box-shadow: 0 12px 26px rgba(22, 164, 111, 0.2);
+}
+
+.exhibition-icon-card.scheduled {
+  background: linear-gradient(135deg, #8aa3ff, var(--primary));
+}
+
+.exhibition-icon-card.closed {
+  background: linear-gradient(135deg, #aeb7ca, #6f7b92);
+  box-shadow: 0 12px 26px rgba(111, 123, 146, 0.16);
+}
+
+.exhibition-main {
+  min-width: 0;
+}
+
+.exhibition-main-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.exhibition-main-header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.06rem;
+  font-weight: 950;
+  letter-spacing: -0.025em;
+}
+
+.exhibition-main-header p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.exhibition-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 0.75rem;
+  border: 1px solid #d7e1ff;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 0.8rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.exhibition-status-pill.live {
+  border-color: #afe8d0;
+  background: #e9fbf3;
+  color: #08734d;
+}
+
+.exhibition-status-pill.closed {
+  border-color: #dce2ec;
+  background: #f2f5fa;
+  color: #607087;
+}
+
+.exhibition-meta-grid {
+  display: grid;
+  grid-template-columns: 230px 120px minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.exhibition-meta-grid div {
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: rgba(248, 250, 255, 0.82);
+}
+
+.exhibition-meta-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.exhibition-meta-grid strong {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exhibition-description {
+  margin: 0.85rem 0 0;
+  padding: 0.85rem 0.95rem;
+  border-left: 4px solid var(--primary);
+  border-radius: 14px;
+  background: rgba(248, 250, 255, 0.82);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.exhibition-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.btn-secondary {
+  background: #f8faff;
+  border-color: var(--border);
+  color: var(--ink-soft);
+}
+
+.btn-secondary:hover {
+  background: var(--primary-lighter);
+  border-color: var(--border-strong);
+  color: var(--primary-dark);
+}
+
+.btn-danger-soft {
+  border-color: #f4b8b8;
+  background: #fffafa;
+  color: #cf3b3b;
+}
+
+.btn-danger-soft:hover {
+  background: #fff1f1;
+  border-color: #ee9999;
+  color: #b62828;
+}
+
+.exhibitions-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.exhibitions-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 22px;
+  background: var(--primary-soft);
+  font-size: 1.55rem;
+}
+
+.exhibitions-empty-state h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.25rem;
+}
+
+.exhibitions-empty-state p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.exhibitions-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+@media (max-width: 1200px) {
+  .exhibition-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1050px) {
+  .exhibition-row-card {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .exhibition-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 900px) {
+  .exhibitions-page-header {
+    flex-direction: column;
+  }
+
+  .exhibitions-header-actions {
+    padding-top: 0;
+  }
+
+  .exhibition-stats-grid,
+  .exhibitions-toolbar,
+  .exhibition-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exhibitions-search-row {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .exhibitions-card {
+    padding: 0.9rem;
+    border-radius: 20px;
+  }
+
+  .exhibition-row-card {
+    grid-template-columns: 1fr;
+  }
+
+  .exhibition-icon-card {
+    width: 50px;
+    height: 50px;
+    border-radius: 17px;
+  }
+
+  .exhibition-main-header {
+    flex-direction: column;
+  }
+
+  .exhibition-actions {
+    flex-direction: column;
+  }
+
+  .exhibition-actions .btn,
+  .exhibition-actions button {
+    width: 100%;
+  }
+
+  .exhibitions-pagination {
+    flex-direction: column;
+  }
+}
+</style>

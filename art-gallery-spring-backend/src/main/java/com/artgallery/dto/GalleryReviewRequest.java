@@ -8,16 +8,20 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 /**
- * Payload for creating/updating a {@code GalleryReview}.
- * The rule "at least one of artwork/exhibition must be set" is enforced in the service.
+ * Payload for creating/updating a GalleryReview.
+ *
+ * The frontend no longer displays the review date.
+ * The field is kept for backward compatibility with existing tests/API calls.
+ * If it is missing, the service generates/preserves the date.
  */
 public record GalleryReviewRequest(
-
         @NotNull(message = "Visitor is required")
         Long visitorId,
 
+        @NotNull(message = "Artwork is required")
         Long artworkId,
 
+        @NotNull(message = "Exhibition is required")
         Long exhibitionId,
 
         @NotNull(message = "Rating is required")
@@ -28,6 +32,6 @@ public record GalleryReviewRequest(
         @Size(max = 256, message = "Review text must be at most 256 characters")
         String reviewText,
 
-        @NotNull(message = "Review date is required")
-        LocalDate reviewDate) {
+        LocalDate reviewDate
+) {
 }

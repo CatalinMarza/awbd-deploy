@@ -1,17 +1,20 @@
 package com.artgallery.dto;
 
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PastOrPresent;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
 /**
- * Payload for creating/updating a {@code Visitor}.
+ * Payload for creating/updating a Visitor.
+ *
+ * The frontend no longer displays the join date.
+ * The field is kept for backward compatibility with existing tests/API calls.
+ * If it is missing, the service generates/preserves the date.
  */
 public record VisitorRequest(
-
         @NotBlank(message = "Name is required")
         @Size(max = 128, message = "Name must be at most 128 characters")
         String name,
@@ -27,5 +30,6 @@ public record VisitorRequest(
         String membershipType,
 
         @PastOrPresent(message = "Join date cannot be in the future")
-        LocalDate joinDate) {
+        LocalDate joinDate
+) {
 }
